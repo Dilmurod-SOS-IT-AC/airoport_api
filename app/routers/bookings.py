@@ -8,20 +8,20 @@ from app.pricing import get_ticket_price
 from app.routers.flights import get_flight_or_404
 from app.schemas import BookingCreate, BookingRead, PricePreview, SeatClass
 
-router = APIRouter(prefix="/bookings", tags=["Бронирования"])
+router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
 def get_booking_or_404(db: Session, booking_id: int) -> Booking:
     booking = db.get(Booking, booking_id)
     if booking is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Бронь id={booking_id} не найдена")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Booking id={booking_id} not found")
     return booking
 
 
-@router.get("/", response_model=list[BookingRead], summary="Список бронирований")
+@router.get("/", response_model=list[BookingRead])
 def list_bookings(
-    flight_id: int | None = Query(default=None, gt=0, description="Только этот рейс"),
-    passport_number: str | None = Query(default=None, description="Брони пассажира"),
+    flight_id: int | None = Query(default=None, gt=0, description="Only current flight"),
+    passport_number: str | None = Query(default=None, description="Customer bookings"),
     db: Session = Depends(get_db),
 ):
     stmt = select(Booking).order_by(Booking.id)
@@ -32,8 +32,8 @@ def list_bookings(
     return db.scalars(stmt).all()
 
 
-# Фиксированный путь — ВЫШЕ, чем /{booking_id}
-@router.get("/price-preview", response_model=PricePreview, summary="Узнать цену билета")
+
+@router.get("/price-preview", response_model=PricePreview)
 def price_preview(
     flight_id: int = Query(gt=0),
     seat_class: SeatClass = Query(default=SeatClass.economy),
@@ -48,18 +48,17 @@ def price_preview(
     )
 
 
-@router.get("/{booking_id}", response_model=BookingRead, summary="Бронь по id")
+@router.get("/{booking_id}", response_model=BookingRead)
 def get_booking(booking_id: int = Path(gt=0), db: Session = Depends(get_db)):
     return get_booking_or_404(db, booking_id)
 
 
-@router.post("/", response_model=BookingRead, status_code=status.HTTP_201_CREATED,
-             summary="Забронировать билет")
+@router.post("/", response_model=BookingRead, status_code=status.HTTP_201_CREATED)
 def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
     flight = get_flight_or_404(db, data.flight_id)
 
     if flight.available_seats <= 0:
-        raise HTTPException(status.HTTP_409_CONFLICT, "На рейсе нет свободных мест")
+        raise HTTPException(status.HTTP_409_CONFLICT, "No seats available")
 
     already_booked = db.scalar(
         select(Booking).where(Booking.flight_id == flight.id,
@@ -67,7 +66,7 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
     )
     if already_booked:
         raise HTTPException(status.HTTP_409_CONFLICT,
-                            "Этот пассажир уже забронировал этот рейс")
+                            "Passanger already booked this seat")
 
     booking = Booking(
         flight_id=flight.id,
@@ -82,8 +81,7 @@ def create_booking(data: BookingCreate, db: Session = Depends(get_db)):
     return booking
 
 
-@router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT,
-               summary="Отменить бронь")
+@router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
 def cancel_booking(booking_id: int = Path(gt=0), db: Session = Depends(get_db)):
     booking = get_booking_or_404(db, booking_id)
     db.delete(booking)
