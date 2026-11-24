@@ -39,3 +39,27 @@ def create_airport(data: AirportCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(airport)
     return airport
+
+@router.patch("/{airport_id}", response_model=AirportRead)
+def update_airport(data: AirportUpdate, airport_id: int = Path(gt=0), db:Session = Depends(get_db)):
+    airport = get_airport_or_404(db, airport_id)
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(airport, field, value)
+    db.commit()
+    db.refresh(airport)
+    return airport
+
+@router.delete("/{airport_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_airport(airport_id: int = Path(gt=0), db:Session = Depends(get_db)):
+    airport = get_airport_or_404(db, airport_id)
+    has_flights = db.scalar(
+        select(Flight.id).where(
+            (Flight.origin_id == airport_id) | (Flight.destination_id == airport_id)
+        ).limit(1)
+    )
+    
+    if has_flights: raise HTTPException(status.HTTP_409_CONFLICT, "u cant delete airoport with assigned flights")
+
+    db.delete(airport)
+    db.commit()
