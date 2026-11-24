@@ -10,7 +10,6 @@ from app.schemas import FlightCreate, FlightRead, FlightUpdate
 
 router = APIRouter(prefix="/flights", tags=["Рейсы"])
 
-# Сразу подгружаем связанные данные, чтобы не делать лишних запросов
 FLIGHT_LOAD = (
     selectinload(Flight.origin),
     selectinload(Flight.destination),
@@ -32,7 +31,6 @@ def list_flights(
     on_date: date | None = Query(default=None, description="Дата вылета, ГГГГ-ММ-ДД"),
     db: Session = Depends(get_db),
 ):
-    # Две копии таблицы airports: одна для вылета, другая для прилёта
     Origin = aliased(Airport)
     Destination = aliased(Airport)
     stmt = (
@@ -71,3 +69,31 @@ def create_flight(data: FlightCreate, db: Session = Depends(get_db)):
     db.add(flight)
     db.commit()
     return get_flight_or_404(db, flight.id)
+
+@router.patch("/{flight_id}", response_model=FlightRead, summary="Изменить рейс")
+def update_flight(data: FlightUpdate, flight_id: int = Path(gt=0),
+                  db: Session = Depends(get_db)):
+    flight = get_flight_or_404(db, flight_id)
+    changes = data.model_dump(exclude_unset=True)
+
+    new_departure = changes.get("departure_time", flight.departure_time)
+    new_arrival = changes.get("arrival_time", flight.arrival_time)
+    if new_arrival <= new_departure:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Время прилёта должно быть позже времени вылета")
+    if "total_seats" in changes and changes["total_seats"] < len(flight.bookings):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Уже продано {len(flight.bookings)} мест — меньше нельзя")
+
+    for field, value in changes.items():
+        setattr(flight, field, value)
+    db.commit()
+    return get_flight_or_404(db, flight_id)
+
+
+@router.delete("/{flight_id}", status_code=status.HTTP_204_NO_CONTENT,
+               summary="Удалить рейс (вместе с бронированиями)")
+def delete_flight(flight_id: int = Path(gt=0), db: Session = Depends(get_db)):
+    flight = get_flight_or_404(db, flight_id)
+    db.delete(flight)  # cascade удалит и бронирования
+    db.commit()
