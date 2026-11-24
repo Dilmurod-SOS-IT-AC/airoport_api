@@ -51,7 +51,7 @@ def list_flights(
     return db.scalars(stmt).all()
 
 
-@router.get("/{flight_id}", response_model=FlightRead, summary="Рейс по id")
+@router.get("/{flight_id}", response_model=FlightRead)
 def get_flight(flight_id: int = Path(gt=0), db: Session = Depends(get_db)):
     return get_flight_or_404(db, flight_id)
 
@@ -61,16 +61,16 @@ def get_flight(flight_id: int = Path(gt=0), db: Session = Depends(get_db)):
 def create_flight(data: FlightCreate, db: Session = Depends(get_db)):
     for airport_id in (data.origin_id, data.destination_id):
         if db.get(Airport, airport_id) is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Аэропорт id={airport_id} не найден")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Airport id={airport_id} not found")
     if db.scalar(select(Flight).where(Flight.flight_number == data.flight_number)):
         raise HTTPException(status.HTTP_409_CONFLICT,
-                            f"Рейс {data.flight_number} уже существует")
+                            f"Flight {data.flight_number} already exists")
     flight = Flight(**data.model_dump())
     db.add(flight)
     db.commit()
     return get_flight_or_404(db, flight.id)
 
-@router.patch("/{flight_id}", response_model=FlightRead, summary="Изменить рейс")
+@router.patch("/{flight_id}", response_model=FlightRead)
 def update_flight(data: FlightUpdate, flight_id: int = Path(gt=0),
                   db: Session = Depends(get_db)):
     flight = get_flight_or_404(db, flight_id)
@@ -80,10 +80,10 @@ def update_flight(data: FlightUpdate, flight_id: int = Path(gt=0),
     new_arrival = changes.get("arrival_time", flight.arrival_time)
     if new_arrival <= new_departure:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "Время прилёта должно быть позже времени вылета")
+                            "departure time must be earlier than departure time")
     if "total_seats" in changes and changes["total_seats"] < len(flight.bookings):
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            f"Уже продано {len(flight.bookings)} мест — меньше нельзя")
+                            f"Already sold {len(flight.bookings)}")
 
     for field, value in changes.items():
         setattr(flight, field, value)
@@ -91,9 +91,8 @@ def update_flight(data: FlightUpdate, flight_id: int = Path(gt=0),
     return get_flight_or_404(db, flight_id)
 
 
-@router.delete("/{flight_id}", status_code=status.HTTP_204_NO_CONTENT,
-               summary="Удалить рейс (вместе с бронированиями)")
+@router.delete("/{flight_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_flight(flight_id: int = Path(gt=0), db: Session = Depends(get_db)):
     flight = get_flight_or_404(db, flight_id)
-    db.delete(flight)  # cascade удалит и бронирования
+    db.delete(flight)  # cascade
     db.commit()
