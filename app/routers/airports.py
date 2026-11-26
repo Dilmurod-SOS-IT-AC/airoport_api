@@ -14,7 +14,7 @@ def get_airport_or_404(db: Session, airport_id: int) -> Airport:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Airport id={airport_id} not found")
     return airport
 
-@router.get("/", response_model=list(AirportRead), summary="Airports List")
+@router.get("/", response_model=list[AirportRead], summary="Airports List")
 def list_aiports(
     country: str | None = Query(default=None, description="filter by country"),
     skip: int = Query(default=0, ge=0),

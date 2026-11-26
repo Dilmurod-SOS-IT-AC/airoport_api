@@ -39,7 +39,7 @@ class Flight(Base):
 
 class Booking(Base):
     __tablename__ = "bookings"
-    __table_args__ = (UniqueConstraint("flight_id", "passport_num"))
+    __table_args__ = (UniqueConstraint("flight_id", "passport_num"),)
 
 
     id: Mapped[int] = mapped_column(primary_key=True)
